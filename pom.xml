@@ -91,7 +91,7 @@
         <maven.javadoc.skip>true</maven.javadoc.skip>
         <maven.test.skip>true</maven.test.skip>
         <commons-collections4.version>4.5.0</commons-collections4.version>
-        <commons-csv.version>1.14.1</commons-csv.version>
+        <univocity-parsers.version>2.9.1</univocity-parsers.version>
         <commons-lang3.version>3.18.0</commons-lang3.version>
         <poi.version>5.5.1</poi.version>
         <ehcache.version>3.9.11</ehcache.version>
@@ -162,9 +162,9 @@
                 <version>${commons-collections4.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.apache.commons</groupId>
-                <artifactId>commons-csv</artifactId>
-                <version>${commons-csv.version}</version>
+                <groupId>com.univocity</groupId>
+                <artifactId>univocity-parsers</artifactId>
+                <version>${univocity-parsers.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.commons</groupId>

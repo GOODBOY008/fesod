@@ -22,18 +22,18 @@ package org.apache.fesod.sheet.analysis.csv;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.UncheckedIOException;
+import java.io.Reader;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.univocity.parsers.common.TextParsingException;
+import com.univocity.parsers.csv.CsvParser;
+import com.univocity.parsers.csv.CsvParserSettings;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.io.input.BOMInputStream;
 import org.apache.fesod.common.util.StringUtils;
 import org.apache.fesod.sheet.analysis.ExcelReadExecutor;
@@ -44,6 +44,7 @@ import org.apache.fesod.sheet.enums.RowTypeEnum;
 import org.apache.fesod.sheet.exception.ExcelAnalysisException;
 import org.apache.fesod.sheet.exception.ExcelAnalysisStopSheetException;
 import org.apache.fesod.sheet.metadata.Cell;
+import org.apache.fesod.sheet.metadata.csv.CsvFormatConfiguration;
 import org.apache.fesod.sheet.metadata.data.ReadCellData;
 import org.apache.fesod.sheet.read.metadata.ReadSheet;
 import org.apache.fesod.sheet.read.metadata.holder.ReadRowHolder;
@@ -52,6 +53,7 @@ import org.apache.fesod.sheet.util.SheetUtils;
 
 /**
  * CSV Excel Read Executor, responsible for reading and processing CSV files.
+ * Uses uniVocity-parsers for CSV parsing.
  */
 @Slf4j
 public class CsvExcelReadExecutor implements ExcelReadExecutor {
@@ -76,14 +78,14 @@ public class CsvExcelReadExecutor implements ExcelReadExecutor {
 
     /**
      * Overrides the execute method to parse and process CSV files.
-     * This method first attempts to create a CSV parser, then iterates through each sheet,
-     * and processes each record in the CSV file.
+     * This method first attempts to create a uniVocity CSV parser, then iterates through each sheet,
+     * and processes each record in the CSV file using {@code parseNext()}.
      */
     @Override
     public void execute() {
-        CSVParser csvParser;
+        CsvParser csvParser;
         try {
-            // Create a CSV parser instance
+            // Create a uniVocity CSV parser instance
             csvParser = csvParser();
             // Store the CSV parser instance in the context for subsequent processing
             csvReadContext.csvReadWorkbookHolder().setCsvParser(csvParser);
@@ -105,7 +107,9 @@ public class CsvExcelReadExecutor implements ExcelReadExecutor {
                 // Initialize the row index
                 int rowIndex = 0;
 
-                for (CSVRecord record : csvParser) {
+                // Use uniVocity's parseNext() loop to iterate row by row
+                String[] record;
+                while ((record = csvParser.parseNext()) != null) {
                     // Process the current record, incrementing the row index after each processing
                     dealRecord(record, rowIndex++);
                 }
@@ -113,10 +117,9 @@ public class CsvExcelReadExecutor implements ExcelReadExecutor {
                 if (log.isDebugEnabled()) {
                     log.debug("Custom stop!", e);
                 }
-            } catch (UncheckedIOException e) {
-                // Apache Commons CSV may throw UncheckedIOException wrapping an IOException when the input
-                // contains truncated quoted fields or reaches EOF unexpectedly. Treat such cases as benign
-                // and end the current sheet gracefully; otherwise, rethrow as analysis exception.
+            } catch (TextParsingException e) {
+                // uniVocity throws TextParsingException for truncated quoted fields or unexpected EOF
+                // within a quoted field. Treat such cases as benign and end the current sheet gracefully.
                 if (isBenignCsvParseException(e)) {
                     if (log.isDebugEnabled()) {
                         log.debug("CSV parse finished early due to benign parse error: {}", e.getMessage());
@@ -134,91 +137,80 @@ public class CsvExcelReadExecutor implements ExcelReadExecutor {
     }
 
     /**
-     * Initializes and returns a CSVParser instance based on the configuration provided in the CsvReadContext.
-     * This method determines the appropriate input stream and character set to create the CSV parser.
+     * Initializes and returns a uniVocity {@link CsvParser} instance based on the configuration
+     * provided in the CsvReadContext. This method determines the appropriate input stream and
+     * character set to create the CSV parser.
      *
-     * @return A CSVParser instance for parsing CSV files.
+     * @return A uniVocity CsvParser instance for parsing CSV files.
      * @throws IOException If an I/O error occurs while accessing the input stream or file.
      */
-    private CSVParser csvParser() throws IOException {
+    private CsvParser csvParser() throws IOException {
         // Retrieve the CsvReadWorkbookHolder instance from the CsvReadContext.
         CsvReadWorkbookHolder csvReadWorkbookHolder = csvReadContext.csvReadWorkbookHolder();
         // Get the CSV format configuration from the CsvReadWorkbookHolder.
-        CSVFormat csvFormat = csvReadWorkbookHolder.getCsvFormat();
+        CsvFormatConfiguration csvFormatConfiguration = csvReadWorkbookHolder.getCsvFormatConfiguration();
+        // Convert to uniVocity parser settings
+        CsvParserSettings parserSettings = csvFormatConfiguration.toParserSettings();
         // Determine the ByteOrderMarkEnum based on the character set name.
         ByteOrderMarkEnum byteOrderMark = ByteOrderMarkEnum.valueOfByCharsetName(
                 csvReadContext.csvReadWorkbookHolder().getCharset().name());
 
-        // If the configuration mandates the use of an input stream, build the CSV parser using the input stream.
+        // Build the reader with BOM handling and charset decoding
+        Reader reader;
+        InputStream inputStream;
+
+        // If the configuration mandates the use of an input stream, use it.
         if (csvReadWorkbookHolder.getMandatoryUseInputStream()) {
-            return buildCsvParser(csvFormat, csvReadWorkbookHolder.getInputStream(), byteOrderMark);
+            inputStream = csvReadWorkbookHolder.getInputStream();
+        } else if (csvReadWorkbookHolder.getFile() != null) {
+            // If a file is provided in the configuration, use the file's input stream.
+            inputStream = Files.newInputStream(csvReadWorkbookHolder.getFile().toPath());
+        } else {
+            // As a fallback, use the input stream.
+            inputStream = csvReadWorkbookHolder.getInputStream();
         }
 
-        // If a file is provided in the configuration, build the CSV parser using the file's input stream.
-        if (csvReadWorkbookHolder.getFile() != null) {
-            return buildCsvParser(
-                    csvFormat,
-                    Files.newInputStream(csvReadWorkbookHolder.getFile().toPath()),
-                    byteOrderMark);
-        }
+        reader = buildReader(inputStream, byteOrderMark);
 
-        // As a fallback, build the CSV parser using the input stream.
-        return buildCsvParser(csvFormat, csvReadWorkbookHolder.getInputStream(), byteOrderMark);
+        // Create and begin parsing with the uniVocity CsvParser
+        CsvParser parser = new CsvParser(parserSettings);
+        parser.beginParsing(reader);
+        return parser;
     }
 
     /**
-     * Builds and returns a CSVParser instance based on the provided CSVFormat, InputStream, and ByteOrderMarkEnum.
+     * Builds a {@link Reader} from the provided InputStream, handling BOM detection when needed.
      *
-     * <p>
-     * This method checks if the byteOrderMark is null. If it is null, it creates a CSVParser using the provided
-     * input stream and charset. Otherwise, it wraps the input stream with a BOMInputStream to handle files with a
-     * Byte Order Mark, ensuring proper decoding of the file content.
-     * </p>
-     *
-     * @param csvFormat     The format configuration for parsing the CSV file.
      * @param inputStream   The input stream from which the CSV data will be read.
      * @param byteOrderMark The enumeration representing the Byte Order Mark (BOM) of the file's character set.
-     * @return A CSVParser instance configured to parse the CSV data.
-     * @throws IOException If an I/O error occurs while creating the parser or reading from the input stream.
+     * @return A Reader configured to decode the CSV data with proper BOM handling.
      */
-    private CSVParser buildCsvParser(CSVFormat csvFormat, InputStream inputStream, ByteOrderMarkEnum byteOrderMark)
-            throws IOException {
+    private Reader buildReader(InputStream inputStream, ByteOrderMarkEnum byteOrderMark) {
         if (byteOrderMark == null) {
-            return csvFormat.parse(new InputStreamReader(
-                    inputStream, csvReadContext.csvReadWorkbookHolder().getCharset()));
+            return new InputStreamReader(
+                    inputStream, csvReadContext.csvReadWorkbookHolder().getCharset());
         }
-        return csvFormat.parse(new InputStreamReader(
+        return new InputStreamReader(
                 new BOMInputStream(inputStream, byteOrderMark.getByteOrderMark()),
-                csvReadContext.csvReadWorkbookHolder().getCharset()));
+                csvReadContext.csvReadWorkbookHolder().getCharset());
     }
 
     /**
-     * Processes a single CSV record and maps its content to a structured format for further analysis.
+     * Processes a single CSV record (as a {@code String[]}) and maps its content to a structured
+     * format for further analysis.
      *
-     * @param record   The CSV record to be processed.
+     * @param record   The CSV record as a String array to be processed.
      * @param rowIndex The index of the current row being processed.
-     *                 This method performs the following steps:
-     *                 1. Initializes a `LinkedHashMap` to store cell data, ensuring the order of columns is preserved.
-     *                 2. Iterates through each cell in the CSV record using an iterator.
-     *                 3. For each cell, creates a `ReadCellData` object and sets its metadata (row index, column index, type, and value).
-     *                 - If the cell is not blank, it is treated as a string and optionally trimmed based on the `autoTrim` configuration.
-     *                 - If the cell is blank, it is marked as empty.
-     *                 4. Adds the processed cell data to the `cellMap`.
-     *                 5. Determines the row type: if the `cellMap` is empty, the row is marked as `EMPTY`; otherwise, it is marked as `DATA`.
-     *                 6. Creates a `ReadRowHolder` object with the row's metadata and cell map, and stores it in the context.
-     *                 7. Updates the context's sheet holder with the cell map and row index.
-     *                 8. Notifies the analysis event processor that the row processing has ended.
      */
-    private void dealRecord(CSVRecord record, int rowIndex) {
+    private void dealRecord(String[] record, int rowIndex) {
         Map<Integer, Cell> cellMap = new LinkedHashMap<>();
-        Iterator<String> cellIterator = record.iterator();
-        int columnIndex = 0;
         Boolean autoTrim =
                 csvReadContext.csvReadWorkbookHolder().globalConfiguration().getAutoTrim();
         Boolean autoStrip =
                 csvReadContext.csvReadWorkbookHolder().globalConfiguration().getAutoStrip();
-        while (cellIterator.hasNext()) {
-            String cellString = cellIterator.next();
+
+        for (int columnIndex = 0; columnIndex < record.length; columnIndex++) {
+            String cellString = record[columnIndex];
             ReadCellData<String> readCellData = new ReadCellData<>();
             readCellData.setRowIndex(rowIndex);
             readCellData.setColumnIndex(columnIndex);
@@ -236,7 +228,7 @@ public class CsvExcelReadExecutor implements ExcelReadExecutor {
             } else {
                 readCellData.setType(CellDataTypeEnum.EMPTY);
             }
-            cellMap.put(columnIndex++, readCellData);
+            cellMap.put(columnIndex, readCellData);
         }
 
         RowTypeEnum rowType = MapUtils.isEmpty(cellMap) ? RowTypeEnum.EMPTY : RowTypeEnum.DATA;
@@ -250,23 +242,21 @@ public class CsvExcelReadExecutor implements ExcelReadExecutor {
     }
 
     /**
-     * Determine whether an UncheckedIOException from Commons CSV is benign, i.e., caused by
-     * truncated quoted fields or early EOF while parsing an encapsulated token. In such cases
+     * Determine whether a {@link TextParsingException} from uniVocity is benign, i.e., caused by
+     * truncated quoted fields or early EOF while parsing a quoted field. In such cases
      * we should stop reading the current sheet gracefully rather than failing the whole read.
      */
     private static boolean isBenignCsvParseException(Throwable t) {
         Throwable cur = t;
         while (cur != null) {
-            if (cur instanceof IOException) {
-                String msg = cur.getMessage();
-                if (msg != null) {
-                    // Messages observed from Apache Commons CSV
-                    if (msg.contains("EOF reached before encapsulated token finished")
-                            || msg.contains("encapsulated token finished")
-                            || msg.contains("Unexpected EOF in quoted field")
-                            || msg.contains("Unclosed quoted field")) {
-                        return true;
-                    }
+            String msg = cur.getMessage();
+            if (msg != null) {
+                // Messages from uniVocity-parsers for truncated/unterminated quoted fields
+                if (msg.contains("Unexpected end of input")
+                        || msg.contains("end of input")
+                        || msg.contains("Unescaped quote character")
+                        || msg.contains("not enclosed in quotes")) {
+                    return true;
                 }
             }
             cur = cur.getCause();

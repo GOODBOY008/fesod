@@ -254,7 +254,7 @@ public class ExcelAnalyserImpl implements ExcelAnalyser {
             if ((readWorkbookHolder instanceof CsvReadWorkbookHolder)
                     && ((CsvReadWorkbookHolder) readWorkbookHolder).getCsvParser() != null
                     && analysisContext.readWorkbookHolder().getAutoCloseStream()) {
-                ((CsvReadWorkbookHolder) readWorkbookHolder).getCsvParser().close();
+                ((CsvReadWorkbookHolder) readWorkbookHolder).getCsvParser().stopParsing();
             }
         } catch (Throwable t) {
             throwable = t;

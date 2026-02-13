@@ -26,7 +26,7 @@ import java.nio.charset.Charset;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
-import org.apache.commons.csv.CSVFormat;
+import org.apache.fesod.sheet.metadata.csv.CsvFormatConfiguration;
 import org.apache.fesod.sheet.support.ExcelTypeEnum;
 
 /**
@@ -105,8 +105,8 @@ public class WriteWorkbook extends WriteBasicParameter {
      */
     private Boolean writeExcelOnException;
     /**
-     * Specifies CSVFormat for parsing.
+     * Specifies CSV format configuration for parsing.
      * Only work on the CSV file.
      */
-    private CSVFormat csvFormat;
+    private CsvFormatConfiguration csvFormatConfiguration;
 }

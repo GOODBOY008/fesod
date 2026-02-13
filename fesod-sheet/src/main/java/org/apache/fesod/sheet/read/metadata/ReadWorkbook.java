@@ -27,7 +27,6 @@ import javax.xml.parsers.SAXParserFactory;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
-import org.apache.commons.csv.CSVFormat;
 import org.apache.fesod.sheet.cache.ReadCache;
 import org.apache.fesod.sheet.cache.selector.ReadCacheSelector;
 import org.apache.fesod.sheet.cache.selector.SimpleReadCacheSelector;
@@ -35,6 +34,7 @@ import org.apache.fesod.sheet.context.AnalysisContext;
 import org.apache.fesod.sheet.enums.CellExtraTypeEnum;
 import org.apache.fesod.sheet.enums.ReadDefaultReturnEnum;
 import org.apache.fesod.sheet.event.AnalysisEventListener;
+import org.apache.fesod.sheet.metadata.csv.CsvFormatConfiguration;
 import org.apache.fesod.sheet.read.listener.ModelBuildEventListener;
 import org.apache.fesod.sheet.support.ExcelTypeEnum;
 
@@ -144,8 +144,8 @@ public class ReadWorkbook extends ReadBasicParameter {
     private Boolean ignoreHiddenSheet;
 
     /**
-     * Specifies CSVFormat for parsing.
+     * Specifies CSV format configuration for parsing.
      * Only work on the CSV file.
      */
-    private CSVFormat csvFormat;
+    private CsvFormatConfiguration csvFormatConfiguration;
 }

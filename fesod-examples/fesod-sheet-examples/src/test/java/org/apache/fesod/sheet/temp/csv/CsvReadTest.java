@@ -20,18 +20,20 @@
 package org.apache.fesod.sheet.temp.csv;
 
 import com.alibaba.fastjson2.JSON;
+import com.univocity.parsers.csv.CsvParser;
+import com.univocity.parsers.csv.CsvWriter;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVPrinter;
-import org.apache.commons.csv.CSVRecord;
 import org.apache.fesod.sheet.FastExcel;
+import org.apache.fesod.sheet.metadata.csv.AppendableWriter;
+import org.apache.fesod.sheet.metadata.csv.CsvFormatConfiguration;
 import org.apache.fesod.sheet.util.TestFileUtil;
 import org.apache.poi.poifs.filesystem.FileMagic;
 import org.junit.jupiter.api.Assertions;
@@ -42,26 +44,32 @@ public class CsvReadTest {
 
     @Test
     public void write() throws Exception {
-        Appendable out = new PrintWriter(
-                new OutputStreamWriter(new FileOutputStream(TestFileUtil.createNewFile("csvWrite1.csv"))));
-        CSVPrinter printer = CSVFormat.DEFAULT.withHeader("userId", "userName").print(out);
+        CsvFormatConfiguration config = CsvFormatConfiguration.builder().build();
+        Writer writer = new AppendableWriter(new PrintWriter(
+                new OutputStreamWriter(new FileOutputStream(TestFileUtil.createNewFile("csvWrite1.csv")))));
+        CsvWriter csvWriter = new CsvWriter(writer, config.toWriterSettings());
+        csvWriter.writeHeaders("userId", "userName");
         for (int i = 0; i < 10; i++) {
-            printer.printRecord("userId" + i, "userName" + i);
+            csvWriter.writeRow("userId" + i, "userName" + i);
         }
-        printer.flush();
-        printer.close();
+        csvWriter.flush();
+        csvWriter.close();
     }
 
     @Test
     public void read1() throws Exception {
-        Iterable<CSVRecord> records = CSVFormat.DEFAULT
-                .withNullString("")
-                .parse(new FileReader("src/test/resources/poi/last_row_number_xssf_date_test.csv"));
-        for (CSVRecord record : records) {
-            String lastName = record.get(0);
-            String firstName = record.get(1);
+        CsvFormatConfiguration config = CsvFormatConfiguration.builder()
+                .nullString("")
+                .build();
+        CsvParser parser = new CsvParser(config.toParserSettings());
+        parser.beginParsing(new FileReader("src/test/resources/poi/last_row_number_xssf_date_test.csv"));
+        String[] record;
+        while ((record = parser.parseNext()) != null) {
+            String lastName = record[0];
+            String firstName = record.length > 1 ? record[1] : null;
             log.info("row:{},{}", lastName, firstName);
         }
+        parser.stopParsing();
     }
 
     @Test
@@ -114,13 +122,19 @@ public class CsvReadTest {
     @Test
     public void read() {
         //
-        // Iterable<CSVRecord> records = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(in);
-        // for (CSVRecord record : records) {
-        //    String lastName = record.get("id");
-        //    String firstName = record.get("name");
-        //    System.out.println(lastName);
-        //    System.out.println(firstName);
+        // CsvFormatConfiguration config = CsvFormatConfiguration.builder()
+        //     .skipHeaderRecord(true)
+        //     .build();
+        // CsvParser parser = new CsvParser(config.toParserSettings());
+        // parser.beginParsing(in);
+        // String[] record;
+        // while ((record = parser.parseNext()) != null) {
+        //     String lastName = record[0]; // "id"
+        //     String firstName = record[1]; // "name"
+        //     System.out.println(lastName);
+        //     System.out.println(firstName);
         // }
+        // parser.stopParsing();
 
     }
 }

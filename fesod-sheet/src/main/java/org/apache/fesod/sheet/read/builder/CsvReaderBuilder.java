@@ -131,9 +131,11 @@ public class CsvReaderBuilder extends AbstractExcelReaderParameterBuilder<CsvRea
     }
 
     private ExcelReader buildExcelReader() {
-        this.configBuilder.trim(this.readWorkbook.getAutoTrim() == null
-                || this.readWorkbook.getAutoTrim()
-                || Boolean.TRUE.equals(this.readWorkbook.getAutoStrip()));
+        // Never delegate trimming to the uniVocity parser.  Trimming/stripping is
+        // handled by CsvExcelReadExecutor.dealRecord() which respects autoTrim and
+        // autoStrip independently.  Parser-level trimming interferes with nullString
+        // round-tripping (e.g. \u0000 is trimmed away before the nullValue check).
+        this.configBuilder.trim(false);
         if (this.readWorkbook.getIgnoreEmptyRow() != null) {
             this.configBuilder.ignoreEmptyLines(this.readWorkbook.getIgnoreEmptyRow());
         }

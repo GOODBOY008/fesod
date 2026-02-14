@@ -198,6 +198,10 @@ public class CsvFormatConfiguration {
             settings.setNullValue(nullString);
         }
 
+        // Prevent uniVocity from trimming values during writing — the application
+        // layer handles trimming so the writer must preserve values as-is.
+        settings.trimValues(false);
+
         // Quote mode mapping
         if (quoteMode != null) {
             switch (quoteMode) {

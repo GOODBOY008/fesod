@@ -208,12 +208,20 @@ public class CsvExcelReadExecutor implements ExcelReadExecutor {
                 csvReadContext.csvReadWorkbookHolder().globalConfiguration().getAutoTrim();
         Boolean autoStrip =
                 csvReadContext.csvReadWorkbookHolder().globalConfiguration().getAutoStrip();
+        String nullString =
+                csvReadContext.csvReadWorkbookHolder().getCsvFormatConfiguration().getNullString();
 
         for (int columnIndex = 0; columnIndex < record.length; columnIndex++) {
             String cellString = record[columnIndex];
             ReadCellData<String> readCellData = new ReadCellData<>();
             readCellData.setRowIndex(rowIndex);
             readCellData.setColumnIndex(columnIndex);
+
+            // Treat the configured nullString as an empty cell so that null values
+            // round-trip correctly (the writer emits nullString for null fields).
+            if (nullString != null && nullString.equals(cellString)) {
+                cellString = null;
+            }
 
             // csv is an empty string of whether <code>,,</code> is read or <code>,"",</code>
             if (StringUtils.isNotBlank(cellString)) {

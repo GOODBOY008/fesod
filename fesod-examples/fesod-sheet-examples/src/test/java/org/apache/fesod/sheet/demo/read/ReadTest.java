@@ -36,6 +36,7 @@ import org.apache.fesod.sheet.enums.CellExtraTypeEnum;
 import org.apache.fesod.sheet.read.listener.PageReadListener;
 import org.apache.fesod.sheet.read.listener.ReadListener;
 import org.apache.fesod.sheet.read.metadata.ReadSheet;
+import org.apache.fesod.sheet.metadata.csv.CsvFormatConfiguration;
 import org.apache.fesod.sheet.read.metadata.holder.csv.CsvReadWorkbookHolder;
 import org.apache.fesod.sheet.util.TestFileUtil;
 import org.junit.jupiter.api.Assertions;
@@ -418,9 +419,8 @@ public class ReadTest {
                     CsvReadWorkbookHolder csvReadWorkbookHolder = (CsvReadWorkbookHolder)
                             excelReader.analysisContext().readWorkbookHolder();
                     // Set to comma-separated (default is also comma-separated)
-                    // Note: `withDelimiter` will regenerate the format, so it needs to be set back.
-                    csvReadWorkbookHolder.setCsvFormat(
-                            csvReadWorkbookHolder.getCsvFormat().withDelimiter(','));
+                    csvReadWorkbookHolder.setCsvFormatConfiguration(
+                            CsvFormatConfiguration.builder().delimiter(',').build());
                 }
 
                 // Get all sheets

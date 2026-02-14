@@ -137,7 +137,6 @@ public class CsvFormatConfiguration {
         // desired behavior for reading. Setting it explicitly disables auto-detection.
         if (recordSeparator != null && !DEFAULT_RECORD_SEPARATOR.equals(recordSeparator)) {
             format.setLineSeparator(recordSeparator);
-            settings.setLineSeparatorDetectionEnabled(false);
         } else {
             settings.setLineSeparatorDetectionEnabled(true);
         }

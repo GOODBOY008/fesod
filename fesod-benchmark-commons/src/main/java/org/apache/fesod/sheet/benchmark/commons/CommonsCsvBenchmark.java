@@ -17,8 +17,10 @@
  * under the License.
  */
 
-package org.apache.fesod.sheet.benchmark.integration;
+package org.apache.fesod.sheet.benchmark.commons;
 
+import org.apache.fesod.sheet.FesodSheet;
+import org.apache.fesod.sheet.read.listener.ReadListener;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 
@@ -32,13 +34,12 @@ import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Integration benchmark comparing Apache Commons CSV vs uniVocity-parsers
- * within the Fesod framework.
+ * Benchmark for Fesod with Apache Commons CSV (released version 2.0.1-incubating)
  * 
  * Measures:
  * - Read Throughput (rows/sec)
  * - Write Throughput (rows/sec)
- * - Memory Overhead (allocations per row)
+ * - Memory Overhead (via Blackhole)
  * - JVM GC Pressure (allocation rate)
  */
 @State(Scope.Benchmark)
@@ -47,27 +48,15 @@ import java.util.concurrent.TimeUnit;
 @Fork(1)
 @Warmup(iterations = 3, time = 5)
 @Measurement(iterations = 5, time = 5)
-public class FesodIntegrationBenchmark {
+public class CommonsCsvBenchmark {
 
-    /**
-     * Test data sizes for different scenarios
-     */
     @Param({"1000", "10000", "50000"})
     public int rowCount;
-
-    /**
-     * Parser implementations to compare
-     */
-    @Param({"commons-csv", "univocity"})
-    public String parserType;
 
     public File csvFile;
     public List<TestData> testData;
     private final Random random = new Random(42);
 
-    /**
-     * Test data class
-     */
     public static class TestData {
         public String field1;
         public String field2;
@@ -88,11 +77,8 @@ public class FesodIntegrationBenchmark {
 
     @Setup(Level.Iteration)
     public void setup() throws IOException {
-        // Generate test data
         testData = generateData(rowCount);
-
-        // Create CSV file
-        Path tempDir = Files.createTempDirectory("fesod-benchmark-" + parserType);
+        Path tempDir = Files.createTempDirectory("commons-benchmark");
         csvFile = Files.createTempFile(tempDir, "benchmark-", ".csv").toFile();
         writeCsvFile(csvFile, testData);
     }
@@ -146,38 +132,26 @@ public class FesodIntegrationBenchmark {
     // ========================================================================
 
     /**
-     * Read throughput benchmark - streaming with listener
-     * Measures: rows processed per second
+     * Read throughput - streaming with listener
      */
     @Benchmark
     public int readThroughput() {
         ReadCountingListener listener = new ReadCountingListener();
-        
-        if ("commons-csv".equals(parserType)) {
-            // Simulate Commons CSV read path
-            readWithFesod(csvFile, listener);
-        } else {
-            // Simulate uniVocity read path
-            readWithFesod(csvFile, listener);
-        }
-        
+        FesodSheet.read(csvFile, TestData.class, listener)
+            .sheet()
+            .doRead();
         return listener.getCount();
     }
 
     /**
      * Read with processing - measures allocation and GC pressure
-     * Uses Blackhole to prevent dead code elimination
      */
     @Benchmark
     public int readWithProcessing(Blackhole bh) {
         ProcessingListener listener = new ProcessingListener(bh);
-        
-        if ("commons-csv".equals(parserType)) {
-            readWithFesod(csvFile, listener);
-        } else {
-            readWithFesod(csvFile, listener);
-        }
-        
+        FesodSheet.read(csvFile, TestData.class, listener)
+            .sheet()
+            .doRead();
         return listener.getCount();
     }
 
@@ -187,13 +161,9 @@ public class FesodIntegrationBenchmark {
     @Benchmark
     public List<TestData> readBatchToMemory() {
         BatchReadListener listener = new BatchReadListener();
-        
-        if ("commons-csv".equals(parserType)) {
-            readWithFesod(csvFile, listener);
-        } else {
-            readWithFesod(csvFile, listener);
-        }
-        
+        FesodSheet.read(csvFile, TestData.class, listener)
+            .sheet()
+            .doRead();
         return listener.getData();
     }
 
@@ -202,18 +172,15 @@ public class FesodIntegrationBenchmark {
     // ========================================================================
 
     /**
-     * Write throughput benchmark
-     * Measures: rows written per second
+     * Write throughput
      */
     @Benchmark
     public int writeThroughput() throws IOException {
         File outputFile = Files.createTempFile("write-benchmark-", ".csv").toFile();
         try {
-            if ("commons-csv".equals(parserType)) {
-                writeWithFesod(outputFile, testData);
-            } else {
-                writeWithFesod(outputFile, testData);
-            }
+            FesodSheet.write(outputFile, TestData.class)
+                .sheet()
+                .doWrite(testData);
             return testData.size();
         } finally {
             outputFile.delete();
@@ -228,13 +195,9 @@ public class FesodIntegrationBenchmark {
         File outputFile = Files.createTempFile("write-transform-", ".csv").toFile();
         try {
             List<TestData> transformed = transformData(testData);
-            
-            if ("commons-csv".equals(parserType)) {
-                writeWithFesod(outputFile, transformed);
-            } else {
-                writeWithFesod(outputFile, transformed);
-            }
-            
+            FesodSheet.write(outputFile, TestData.class)
+                .sheet()
+                .doWrite(transformed);
             return transformed.size();
         } finally {
             outputFile.delete();
@@ -242,33 +205,8 @@ public class FesodIntegrationBenchmark {
     }
 
     // ========================================================================
-    // HELPER METHODS (Simulate Fesod API calls)
+    // HELPER METHODS
     // ========================================================================
-
-    private void readWithFesod(File file, Object listener) {
-        // This would call the actual Fesod API
-        // For now, simulate the read operation
-        // In real implementation, this would be:
-        // FesodSheet.read(file, TestData.class, listener).sheet().doRead();
-        
-        // Simulated read - in real benchmark, this calls actual Fesod API
-        if (listener instanceof ReadCountingListener) {
-            ((ReadCountingListener) listener).setCount(testData.size());
-        } else if (listener instanceof ProcessingListener) {
-            ((ProcessingListener) listener).setCount(testData.size());
-        } else if (listener instanceof BatchReadListener) {
-            ((BatchReadListener) listener).setData(testData);
-        }
-    }
-
-    private void writeWithFesod(File file, List<TestData> data) throws IOException {
-        // This would call the actual Fesod API
-        // For now, simulate the write operation
-        // In real implementation, this would be:
-        // FesodSheet.write(file, TestData.class).sheet().doWrite(data);
-        
-        writeCsvFile(file, data);
-    }
 
     private List<TestData> transformData(List<TestData> data) {
         List<TestData> transformed = new ArrayList<>(data.size());
@@ -288,11 +226,17 @@ public class FesodIntegrationBenchmark {
     // LISTENER CLASSES
     // ========================================================================
 
-    public static class ReadCountingListener {
+    public static class ReadCountingListener implements ReadListener<TestData> {
         private int count = 0;
 
-        public void setCount(int count) {
-            this.count = count;
+        @Override
+        public void invoke(TestData data, org.apache.fesod.sheet.context.AnalysisContext context) {
+            count++;
+        }
+
+        @Override
+        public void doAfterAllAnalysed(org.apache.fesod.sheet.context.AnalysisContext context) {
+            // No-op
         }
 
         public int getCount() {
@@ -300,7 +244,7 @@ public class FesodIntegrationBenchmark {
         }
     }
 
-    public static class ProcessingListener {
+    public static class ProcessingListener implements ReadListener<TestData> {
         private final Blackhole bh;
         private int count = 0;
 
@@ -308,11 +252,18 @@ public class FesodIntegrationBenchmark {
             this.bh = bh;
         }
 
-        public void setCount(int count) {
-            for (TestData row : new TestData[0]) {
-                bh.consume(row);
-            }
-            this.count = count;
+        @Override
+        public void invoke(TestData data, org.apache.fesod.sheet.context.AnalysisContext context) {
+            bh.consume(data.field1);
+            bh.consume(data.field2);
+            bh.consume(data.number1);
+            bh.consume(data.number2);
+            count++;
+        }
+
+        @Override
+        public void doAfterAllAnalysed(org.apache.fesod.sheet.context.AnalysisContext context) {
+            // No-op
         }
 
         public int getCount() {
@@ -320,11 +271,17 @@ public class FesodIntegrationBenchmark {
         }
     }
 
-    public static class BatchReadListener {
-        private List<TestData> data;
+    public static class BatchReadListener implements ReadListener<TestData> {
+        private List<TestData> data = new ArrayList<>();
 
-        public void setData(List<TestData> data) {
-            this.data = data;
+        @Override
+        public void invoke(TestData data, org.apache.fesod.sheet.context.AnalysisContext context) {
+            this.data.add(data);
+        }
+
+        @Override
+        public void doAfterAllAnalysed(org.apache.fesod.sheet.context.AnalysisContext context) {
+            // No-op
         }
 
         public List<TestData> getData() {

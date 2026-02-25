@@ -31,20 +31,23 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>fesod-benchmark-integration</artifactId>
-    <name>Fesod Integration Benchmark</name>
-    <description>Integration benchmark comparing Commons CSV vs uniVocity implementations</description>
+    <artifactId>fesod-benchmark-commons</artifactId>
+    <name>Fesod Benchmark - Commons CSV</name>
+    <description>Benchmark for Fesod with Apache Commons CSV (released version 2.0.1-incubating)</description>
 
     <properties>
         <jmh.version>1.37</jmh.version>
-        <uberjar.name>integration-benchmarks</uberjar.name>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
-        <!-- Released Fesod version with Commons CSV -->
-        <fesod.release.version>2.0.0-incubating</fesod.release.version>
+        <uberjar.name>benchmark-commons</uberjar.name>
     </properties>
 
     <dependencies>
+        <!-- Released Fesod from Maven Central (uses Commons CSV) -->
+        <dependency>
+            <groupId>org.apache.fesod</groupId>
+            <artifactId>fesod-sheet</artifactId>
+            <version>2.0.1-incubating</version>
+        </dependency>
+
         <!-- JMH Core -->
         <dependency>
             <groupId>org.openjdk.jmh</groupId>
@@ -58,22 +61,6 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Released Fesod with Commons CSV (from Maven Central) -->
-        <dependency>
-            <groupId>org.apache.fesod</groupId>
-            <artifactId>fesod-sheet</artifactId>
-            <version>${fesod.release.version}</version>
-            <classifier>csv-commons</classifier>
-        </dependency>
-
-        <!-- Current Fesod with uniVocity (local build) -->
-        <dependency>
-            <groupId>org.apache.fesod</groupId>
-            <artifactId>fesod-sheet</artifactId>
-            <version>${project.version}</version>
-            <classifier>csv-univocity</classifier>
-        </dependency>
-
         <!-- Utilities -->
         <dependency>
             <groupId>commons-io</groupId>
@@ -82,13 +69,6 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-        </dependency>
-
-        <!-- Testing -->
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
         </dependency>
     </dependencies>
 
@@ -126,37 +106,10 @@
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>
-                            <filters>
-                                <filter>
-                                    <artifact>*:*</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/*.SF</exclude>
-                                        <exclude>META-INF/*.DSA</exclude>
-                                        <exclude>META-INF/*.RSA</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
                         </configuration>
                     </execution>
                 </executions>
             </plugin>
         </plugins>
     </build>
-
-    <profiles>
-        <profile>
-            <id>benchmark</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-surefire-plugin</artifactId>
-                        <configuration>
-                            <skipTests>true</skipTests>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

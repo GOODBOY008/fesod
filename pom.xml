@@ -79,7 +79,8 @@
         <module>fesod-examples</module>
         <module>fesod-sheet</module>
         <module>fesod-benchmark</module>
-        <module>fesod-benchmark-integration</module>
+        <module>fesod-benchmark-commons</module>
+        <module>fesod-benchmark-univocity</module>
     </modules>
 
     <properties>

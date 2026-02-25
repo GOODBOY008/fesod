@@ -54,10 +54,6 @@ on:
         default: 'true'
         type: boolean
 
-  # Scheduled run (weekly)
-  schedule:
-    - cron: '0 2 * * 0'  # Every Sunday at 2 AM UTC
-
 jobs:
   benchmark-commons-csv:
     name: Benchmark - Commons CSV

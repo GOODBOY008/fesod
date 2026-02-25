@@ -33,7 +33,6 @@ import com.univocity.parsers.common.TextParsingException;
 import com.univocity.parsers.csv.CsvParser;
 import com.univocity.parsers.csv.CsvParserSettings;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.io.input.BOMInputStream;
 import org.apache.fesod.common.util.StringUtils;
 import org.apache.fesod.sheet.analysis.ExcelReadExecutor;
@@ -47,6 +46,7 @@ import org.apache.fesod.sheet.metadata.Cell;
 import org.apache.fesod.sheet.metadata.csv.CsvFormatConfiguration;
 import org.apache.fesod.sheet.metadata.data.ReadCellData;
 import org.apache.fesod.sheet.read.metadata.ReadSheet;
+import org.apache.fesod.sheet.metadata.GlobalConfiguration;
 import org.apache.fesod.sheet.read.metadata.holder.ReadRowHolder;
 import org.apache.fesod.sheet.read.metadata.holder.csv.CsvReadWorkbookHolder;
 import org.apache.fesod.sheet.util.SheetUtils;
@@ -84,14 +84,27 @@ public class CsvExcelReadExecutor implements ExcelReadExecutor {
     @Override
     public void execute() {
         CsvParser csvParser;
+        CsvReadWorkbookHolder workbookHolder = csvReadContext.csvReadWorkbookHolder();
         try {
             // Create a uniVocity CSV parser instance
             csvParser = csvParser();
             // Store the CSV parser instance in the context for subsequent processing
-            csvReadContext.csvReadWorkbookHolder().setCsvParser(csvParser);
+            workbookHolder.setCsvParser(csvParser);
         } catch (IOException e) {
             throw new ExcelAnalysisException(e);
         }
+
+        // Hoist per-row config lookups out of the hot loop — these values never change
+        // during a single read operation, so resolving them once avoids repeated holder
+        // chain traversals on every row.
+        GlobalConfiguration globalConfig = workbookHolder.getGlobalConfiguration();
+        boolean autoTrim = Boolean.TRUE.equals(globalConfig.getAutoTrim());
+        boolean autoStrip = Boolean.TRUE.equals(globalConfig.getAutoStrip());
+        String nullString = workbookHolder.getCsvFormatConfiguration().getNullString();
+
+        // Track column count across rows to pre-size the cellMap
+        int lastColumnCount = 0;
+
         // Iterate through each sheet in the sheet list
         for (ReadSheet readSheet : sheetList) {
             // Match and update the readSheet object
@@ -111,7 +124,8 @@ public class CsvExcelReadExecutor implements ExcelReadExecutor {
                 String[] record;
                 while ((record = csvParser.parseNext()) != null) {
                     // Process the current record, incrementing the row index after each processing
-                    dealRecord(record, rowIndex++);
+                    lastColumnCount = dealRecord(record, rowIndex++, autoTrim, autoStrip,
+                            nullString, globalConfig, lastColumnCount);
                 }
             } catch (ExcelAnalysisStopSheetException e) {
                 if (log.isDebugEnabled()) {
@@ -199,19 +213,30 @@ public class CsvExcelReadExecutor implements ExcelReadExecutor {
      * Processes a single CSV record (as a {@code String[]}) and maps its content to a structured
      * format for further analysis.
      *
-     * @param record   The CSV record as a String array to be processed.
-     * @param rowIndex The index of the current row being processed.
+     * <p>Performance note: config values ({@code autoTrim}, {@code autoStrip}, {@code nullString},
+     * {@code globalConfig}) are resolved once in {@link #execute()} and passed in to avoid
+     * repeated holder-chain traversals on every row.
+     *
+     * @param record          The CSV record as a String array to be processed.
+     * @param rowIndex        The index of the current row being processed.
+     * @param autoTrim        Whether to trim cell values.
+     * @param autoStrip       Whether to strip cell values.
+     * @param nullString      The configured null-string representation, or {@code null}.
+     * @param globalConfig    The global configuration (passed to ReadRowHolder).
+     * @param lastColumnCount The column count from the previous row (used to pre-size the map).
+     * @return The column count of this record (for pre-sizing the next row's map).
      */
-    private void dealRecord(String[] record, int rowIndex) {
-        Map<Integer, Cell> cellMap = new LinkedHashMap<>();
-        Boolean autoTrim =
-                csvReadContext.csvReadWorkbookHolder().globalConfiguration().getAutoTrim();
-        Boolean autoStrip =
-                csvReadContext.csvReadWorkbookHolder().globalConfiguration().getAutoStrip();
-        String nullString =
-                csvReadContext.csvReadWorkbookHolder().getCsvFormatConfiguration().getNullString();
+    private int dealRecord(String[] record, int rowIndex, boolean autoTrim, boolean autoStrip,
+                           String nullString, GlobalConfiguration globalConfig, int lastColumnCount) {
+        int columnCount = record.length;
+        // Pre-size the map: use the larger of current and last column count to reduce rehashing.
+        // The load-factor-adjusted capacity avoids a resize for the expected number of entries.
+        int mapCapacity = Math.max(columnCount, lastColumnCount);
+        mapCapacity = (int) (mapCapacity / 0.75f) + 1;
+        Map<Integer, Cell> cellMap = new LinkedHashMap<>(mapCapacity);
 
-        for (int columnIndex = 0; columnIndex < record.length; columnIndex++) {
+        boolean hasData = false;
+        for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
             String cellString = record[columnIndex];
             ReadCellData<String> readCellData = new ReadCellData<>();
             readCellData.setRowIndex(rowIndex);
@@ -233,20 +258,22 @@ public class CsvExcelReadExecutor implements ExcelReadExecutor {
                 } else {
                     readCellData.setStringValue(cellString);
                 }
+                hasData = true;
             } else {
                 readCellData.setType(CellDataTypeEnum.EMPTY);
             }
             cellMap.put(columnIndex, readCellData);
         }
 
-        RowTypeEnum rowType = MapUtils.isEmpty(cellMap) ? RowTypeEnum.EMPTY : RowTypeEnum.DATA;
-        ReadRowHolder readRowHolder = new ReadRowHolder(
-                rowIndex, rowType, csvReadContext.readWorkbookHolder().getGlobalConfiguration(), cellMap);
+        RowTypeEnum rowType = hasData ? RowTypeEnum.DATA : RowTypeEnum.EMPTY;
+        ReadRowHolder readRowHolder = new ReadRowHolder(rowIndex, rowType, globalConfig, cellMap);
         csvReadContext.readRowHolder(readRowHolder);
 
         csvReadContext.csvReadSheetHolder().setCellMap(cellMap);
         csvReadContext.csvReadSheetHolder().setRowIndex(rowIndex);
         csvReadContext.analysisEventProcessor().endRow(csvReadContext);
+
+        return columnCount;
     }
 
     /**

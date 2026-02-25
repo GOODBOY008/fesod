@@ -1,0 +1,294 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+name: CSV Benchmark - Comprehensive
+
+on:
+  # Manual trigger from GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      dataset_sizes:
+        description: 'Dataset sizes to test (comma-separated)'
+        required: true
+        default: '10000,50000,100000,500000'
+        type: string
+      warmup_iterations:
+        description: 'Warmup iterations'
+        required: false
+        default: '2'
+        type: string
+      measurement_iterations:
+        description: 'Measurement iterations'
+        required: false
+        default: '3'
+        type: string
+      run_time:
+        description: 'Run time per iteration (seconds)'
+        required: false
+        default: '5'
+        type: string
+      heap_size:
+        description: 'JVM heap size (e.g., 4g)'
+        required: false
+        default: '4g'
+        type: string
+      include_gc_logging:
+        description: 'Include GC logging'
+        required: false
+        default: 'true'
+        type: boolean
+
+  # Scheduled run (weekly)
+  schedule:
+    - cron: '0 2 * * 0'  # Every Sunday at 2 AM UTC
+
+jobs:
+  benchmark-commons-csv:
+    name: Benchmark - Commons CSV
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build benchmark modules
+        run: |
+          ./mvnw clean package -DskipTests \
+            -pl fesod-benchmark-commons \
+            -am \
+            -q
+
+      - name: Run Commons CSV Benchmark
+        env:
+          DATASET_SIZES: ${{ inputs.dataset_sizes || '10000,50000,100000,500000' }}
+          WARMUP_ITER: ${{ inputs.warmup_iterations || '2' }}
+          MEASURE_ITER: ${{ inputs.measurement_iterations || '3' }}
+          RUN_TIME: ${{ inputs.run_time || '5' }}
+          HEAP_SIZE: ${{ inputs.heap_size || '4g' }}
+          GC_LOGGING: ${{ inputs.include_gc_logging || 'true' }}
+        run: |
+          mkdir -p fesod-benchmark-commons/target/benchmark-results
+          
+          GC_OPTS=""
+          if [ "$GC_LOGGING" = "true" ]; then
+            GC_OPTS="-Xlog:gc*:file=fesod-benchmark-commons/target/benchmark-results/gc-commons.log:time,uptime"
+          fi
+          
+          java $GC_OPTS -Xmx$HEAP_SIZE \
+            -jar fesod-benchmark-commons/target/benchmark-commons.jar \
+            -wi $WARMUP_ITER \
+            -i $MEASURE_ITER \
+            -f 1 \
+            -r ${RUN_TIME}s \
+            -rf json \
+            -rff fesod-benchmark-commons/target/benchmark-results/commons-results.json \
+            2>&1 | tee fesod-benchmark-commons/target/benchmark-results/commons-output.txt
+
+      - name: Upload Commons CSV Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-commons-csv
+          path: |
+            fesod-benchmark-commons/target/benchmark-results/*.json
+            fesod-benchmark-commons/target/benchmark-results/*.txt
+            fesod-benchmark-commons/target/benchmark-results/*.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  benchmark-univocity:
+    name: Benchmark - uniVocity
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: benchmark-commons-csv
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build benchmark modules
+        run: |
+          ./mvnw clean package -DskipTests \
+            -pl fesod-benchmark-univocity \
+            -am \
+            -q
+
+      - name: Run uniVocity Benchmark
+        env:
+          DATASET_SIZES: ${{ inputs.dataset_sizes || '10000,50000,100000,500000' }}
+          WARMUP_ITER: ${{ inputs.warmup_iterations || '2' }}
+          MEASURE_ITER: ${{ inputs.measurement_iterations || '3' }}
+          RUN_TIME: ${{ inputs.run_time || '5' }}
+          HEAP_SIZE: ${{ inputs.heap_size || '4g' }}
+          GC_LOGGING: ${{ inputs.include_gc_logging || 'true' }}
+        run: |
+          mkdir -p fesod-benchmark-univocity/target/benchmark-results
+          
+          GC_OPTS=""
+          if [ "$GC_LOGGING" = "true" ]; then
+            GC_OPTS="-Xlog:gc*:file=fesod-benchmark-univocity/target/benchmark-results/gc-univocity.log:time,uptime"
+          fi
+          
+          java $GC_OPTS -Xmx$HEAP_SIZE \
+            -jar fesod-benchmark-univocity/target/benchmark-univocity.jar \
+            -wi $WARMUP_ITER \
+            -i $MEASURE_ITER \
+            -f 1 \
+            -r ${RUN_TIME}s \
+            -rf json \
+            -rff fesod-benchmark-univocity/target/benchmark-results/univocity-results.json \
+            2>&1 | tee fesod-benchmark-univocity/target/benchmark-results/univocity-output.txt
+
+      - name: Upload uniVocity Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-univocity
+          path: |
+            fesod-benchmark-univocity/target/benchmark-results/*.json
+            fesod-benchmark-univocity/target/benchmark-results/*.txt
+            fesod-benchmark-univocity/target/benchmark-results/*.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  generate-report:
+    name: Generate Comparison Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [benchmark-commons-csv, benchmark-univocity]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Commons CSV Results
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results-commons-csv
+          path: /tmp/benchmark-commons
+
+      - name: Download uniVocity Results
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results-univocity
+          path: /tmp/benchmark-univocity
+
+      - name: Generate Comparison Summary
+        run: |
+          mkdir -p /tmp/benchmark-report
+
+          # Extract results using jq
+          echo "# CSV Benchmark Comparison Report" > /tmp/benchmark-report/COMPARISON-REPORT.md
+          echo "" >> /tmp/benchmark-report/COMPARISON-REPORT.md
+          echo "**Generated:** $(date -u)" >> /tmp/benchmark-report/COMPARISON-REPORT.md
+          echo "**Workflow Run:** ${{ github.run_id }}" >> /tmp/benchmark-report/COMPARISON-REPORT.md
+          echo "" >> /tmp/benchmark-report/COMPARISON-REPORT.md
+
+          echo "## Commons CSV Results" >> /tmp/benchmark-report/COMPARISON-REPORT.md
+          echo '```' >> /tmp/benchmark-report/COMPARISON-REPORT.md
+          cat /tmp/benchmark-commons/commons-output.txt | grep -A 100 "Benchmark" | head -50 >> /tmp/benchmark-report/COMPARISON-REPORT.md
+          echo '```' >> /tmp/benchmark-report/COMPARISON-REPORT.md
+          echo "" >> /tmp/benchmark-report/COMPARISON-REPORT.md
+
+          echo "## uniVocity Results" >> /tmp/benchmark-report/COMPARISON-REPORT.md
+          echo '```' >> /tmp/benchmark-report/COMPARISON-REPORT.md
+          cat /tmp/benchmark-univocity/univocity-output.txt | grep -A 100 "Benchmark" | head -50 >> /tmp/benchmark-report/COMPARISON-REPORT.md
+          echo '```' >> /tmp/benchmark-report/COMPARISON-REPORT.md
+          echo "" >> /tmp/benchmark-report/COMPARISON-REPORT.md
+
+          echo "## Download Raw Results" >> /tmp/benchmark-report/COMPARISON-REPORT.md
+          echo "- [Commons CSV Results](benchmark-results-commons-csv.zip)" >> /tmp/benchmark-report/COMPARISON-REPORT.md
+          echo "- [uniVocity Results](benchmark-results-univocity.zip)" >> /tmp/benchmark-report/COMPARISON-REPORT.md
+
+      - name: Create Combined Results Package
+        run: |
+          mkdir -p /tmp/benchmark-combined/commons-csv
+          mkdir -p /tmp/benchmark-combined/univocity
+
+          # Copy all results to combined package
+          cp /tmp/benchmark-commons/* /tmp/benchmark-combined/commons-csv/
+          cp /tmp/benchmark-univocity/* /tmp/benchmark-combined/univocity/
+          cp /tmp/benchmark-report/COMPARISON-REPORT.md /tmp/benchmark-combined/
+
+          # Create summary file
+          echo "CSV Benchmark Results - Combined Package" > /tmp/benchmark-combined/README.txt
+          echo "Generated: $(date -u)" >> /tmp/benchmark-combined/README.txt
+          echo "Workflow Run: ${{ github.run_id }}" >> /tmp/benchmark-combined/README.txt
+          echo "" >> /tmp/benchmark-combined/README.txt
+          echo "Contents:" >> /tmp/benchmark-combined/README.txt
+          echo "  - commons-csv/: Apache Commons CSV benchmark results" >> /tmp/benchmark-combined/README.txt
+          echo "  - univocity/: uniVocity-parsers benchmark results" >> /tmp/benchmark-combined/README.txt
+          echo "  - COMPARISON-REPORT.md: Side-by-side comparison" >> /tmp/benchmark-combined/README.txt
+
+      - name: Upload Combined Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-all
+          path: |
+            /tmp/benchmark-combined/**/*
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload Comparison Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-comparison-report
+          path: |
+            /tmp/benchmark-report/COMPARISON-REPORT.md
+          retention-days: 30
+
+  notify:
+    name: Notify Results
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [benchmark-commons-csv, benchmark-univocity, generate-report]
+    if: always()
+
+    steps:
+      - name: Check benchmark status
+        run: |
+          if [ "${{ needs.benchmark-commons-csv.result }}" = "success" ] && \
+             [ "${{ needs.benchmark-univocity.result }}" = "success" ]; then
+            echo "✅ Benchmarks completed successfully!"
+            echo ""
+            echo "📊 Results available as artifacts:"
+            echo "   - benchmark-results-all (Combined: Commons CSV + uniVocity + Report)"
+            echo "   - benchmark-results-commons-csv (Commons CSV only)"
+            echo "   - benchmark-results-univocity (uniVocity only)"
+            echo "   - benchmark-comparison-report (Summary report)"
+            echo ""
+            echo "📦 Download the combined package 'benchmark-results-all' for all results in one ZIP file!"
+          else
+            echo "❌ Benchmark failed"
+            echo "Check the workflow logs for details"
+            exit 1
+          fi

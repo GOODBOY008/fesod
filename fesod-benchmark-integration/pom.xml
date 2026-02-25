@@ -31,25 +31,20 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>fesod-benchmark</artifactId>
-    <name>Fesod Benchmark</name>
-    <description>CSV Parser Migration Benchmark - uniVocity vs Commons CSV</description>
+    <artifactId>fesod-benchmark-integration</artifactId>
+    <name>Fesod Integration Benchmark</name>
+    <description>Integration benchmark comparing Commons CSV vs uniVocity implementations</description>
 
     <properties>
         <jmh.version>1.37</jmh.version>
-        <uberjar.name>csv-benchmarks</uberjar.name>
+        <uberjar.name>integration-benchmarks</uberjar.name>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
+        <!-- Released Fesod version with Commons CSV -->
+        <fesod.release.version>2.0.0-incubating</fesod.release.version>
     </properties>
 
     <dependencies>
-        <!-- Fesod Sheet -->
-        <dependency>
-            <groupId>org.apache.fesod</groupId>
-            <artifactId>fesod-sheet</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
         <!-- JMH Core -->
         <dependency>
             <groupId>org.openjdk.jmh</groupId>
@@ -63,11 +58,20 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Apache Commons CSV for comparison benchmark -->
+        <!-- Released Fesod with Commons CSV (from Maven Central) -->
         <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-csv</artifactId>
-            <version>1.14.1</version>
+            <groupId>org.apache.fesod</groupId>
+            <artifactId>fesod-sheet</artifactId>
+            <version>${fesod.release.version}</version>
+            <classifier>csv-commons</classifier>
+        </dependency>
+
+        <!-- Current Fesod with uniVocity (local build) -->
+        <dependency>
+            <groupId>org.apache.fesod</groupId>
+            <artifactId>fesod-sheet</artifactId>
+            <version>${project.version}</version>
+            <classifier>csv-univocity</classifier>
         </dependency>
 
         <!-- Utilities -->
@@ -78,11 +82,6 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-classic</artifactId>
-            <scope>test</scope>
         </dependency>
 
         <!-- Testing -->
@@ -141,30 +140,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.1.0</version>
-                <executions>
-                    <execution>
-                        <id>run-benchmarks</id>
-                        <phase>integration-test</phase>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
-                        <configuration>
-                            <classpathScope>test</classpathScope>
-                            <executable>java</executable>
-                            <arguments>
-                                <argument>-classpath</argument>
-                                <classpath/>
-                                <argument>org.openjdk.jmh.Main</argument>
-                                <argument>.*</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
 
@@ -182,30 +157,6 @@
                     </plugin>
                 </plugins>
             </build>
-        </profile>
-        <profile>
-            <id>benchmark-quick</id>
-            <properties>
-                <jmh.warmup>1</jmh.warmup>
-                <jmh.measurement>2</jmh.measurement>
-                <jmh.forks>1</jmh.forks>
-            </properties>
-        </profile>
-        <profile>
-            <id>benchmark-standard</id>
-            <properties>
-                <jmh.warmup>3</jmh.warmup>
-                <jmh.measurement>5</jmh.measurement>
-                <jmh.forks>1</jmh.forks>
-            </properties>
-        </profile>
-        <profile>
-            <id>benchmark-comprehensive</id>
-            <properties>
-                <jmh.warmup>5</jmh.warmup>
-                <jmh.measurement>10</jmh.measurement>
-                <jmh.forks>2</jmh.forks>
-            </properties>
         </profile>
     </profiles>
 </project>

@@ -50,7 +50,7 @@ import java.util.concurrent.TimeUnit;
 @Measurement(iterations = 5, time = 5)
 public class UnivocityBenchmark {
 
-    @Param({"1000", "10000", "50000", "100000", "500000", "1000000"})
+    @Param({"10000", "50000", "100000", "500000"})
     public int rowCount;
 
     public File csvFile;

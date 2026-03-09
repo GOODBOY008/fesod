@@ -35,7 +35,6 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.commons.compress.utils.Lists;
-import org.apache.commons.csv.CSVFormat;
 import org.apache.poi.ss.SpreadsheetVersion;
 import org.apache.poi.ss.formula.EvaluationWorkbook;
 import org.apache.poi.ss.formula.udf.UDFFinder;
@@ -109,9 +108,9 @@ public class CsvWorkbook implements Workbook {
     private Boolean withBom;
 
     /**
-     * Specifies CSVFormat for parsing.
+     * Specifies CSV format configuration for parsing.
      */
-    private CSVFormat csvFormat;
+    private CsvFormatConfiguration csvFormatConfiguration;
 
     public CsvWorkbook(
             Appendable out,

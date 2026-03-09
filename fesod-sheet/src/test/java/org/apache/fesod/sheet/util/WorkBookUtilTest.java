@@ -24,8 +24,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
-import org.apache.commons.csv.CSVFormat;
 import org.apache.fesod.sheet.metadata.GlobalConfiguration;
+import org.apache.fesod.sheet.metadata.csv.CsvFormatConfiguration;
 import org.apache.fesod.sheet.metadata.data.DataFormatData;
 import org.apache.fesod.sheet.metadata.data.WriteCellData;
 import org.apache.fesod.sheet.support.ExcelTypeEnum;
@@ -255,7 +255,8 @@ class WorkBookUtilTest {
         Mockito.when(writeWorkbookHolder.getOutputStream()).thenReturn(new ByteArrayOutputStream());
         Mockito.when(writeWorkbookHolder.getCharset()).thenReturn(StandardCharsets.UTF_8);
         Mockito.when(writeWorkbookHolder.getWriteWorkbook()).thenReturn(writeWorkbook);
-        Mockito.when(writeWorkbook.getCsvFormat()).thenReturn(CSVFormat.DEFAULT);
+        Mockito.when(writeWorkbook.getCsvFormatConfiguration())
+                .thenReturn(CsvFormatConfiguration.builder().build());
 
         Mockito.when(writeWorkbookHolder.getGlobalConfiguration()).thenReturn(globalConfiguration);
         Mockito.when(globalConfiguration.getLocale()).thenReturn(Locale.SIMPLIFIED_CHINESE);

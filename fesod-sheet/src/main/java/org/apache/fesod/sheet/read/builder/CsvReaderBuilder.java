@@ -20,11 +20,11 @@
 package org.apache.fesod.sheet.read.builder;
 
 import java.util.List;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.QuoteMode;
 import org.apache.fesod.sheet.ExcelReader;
 import org.apache.fesod.sheet.event.SyncReadListener;
 import org.apache.fesod.sheet.exception.ExcelGenerateException;
+import org.apache.fesod.sheet.metadata.csv.CsvFormatConfiguration;
+import org.apache.fesod.sheet.metadata.csv.CsvQuoteMode;
 import org.apache.fesod.sheet.read.metadata.ReadSheet;
 import org.apache.fesod.sheet.read.metadata.ReadWorkbook;
 import org.apache.fesod.sheet.support.ExcelTypeEnum;
@@ -35,7 +35,7 @@ import org.apache.fesod.sheet.support.ExcelTypeEnum;
 public class CsvReaderBuilder extends AbstractExcelReaderParameterBuilder<CsvReaderBuilder, ReadSheet> {
     private ReadWorkbook readWorkbook;
     private ReadSheet readSheet;
-    private CSVFormat.Builder csvFormatBuilder;
+    private CsvFormatConfiguration.Builder configBuilder;
 
     private CsvReaderBuilder() {}
 
@@ -43,7 +43,7 @@ public class CsvReaderBuilder extends AbstractExcelReaderParameterBuilder<CsvRea
         readWorkbook.setExcelType(ExcelTypeEnum.CSV);
         this.readWorkbook = readWorkbook;
         this.readSheet = new ReadSheet();
-        this.csvFormatBuilder = CSVFormat.DEFAULT.builder();
+        this.configBuilder = CsvFormatConfiguration.builder();
     }
 
     /**
@@ -54,7 +54,7 @@ public class CsvReaderBuilder extends AbstractExcelReaderParameterBuilder<CsvRea
      */
     public CsvReaderBuilder delimiter(String delimiter) {
         if (delimiter != null) {
-            this.csvFormatBuilder.setDelimiter(delimiter);
+            this.configBuilder.delimiter(delimiter);
         }
         return this;
     }
@@ -71,7 +71,7 @@ public class CsvReaderBuilder extends AbstractExcelReaderParameterBuilder<CsvRea
      * @return Returns a CsvReaderBuilder object, enabling method chaining
      */
     public CsvReaderBuilder quote(Character quote) {
-        return quote(quote, QuoteMode.MINIMAL);
+        return quote(quote, CsvQuoteMode.MINIMAL);
     }
 
     /**
@@ -81,12 +81,12 @@ public class CsvReaderBuilder extends AbstractExcelReaderParameterBuilder<CsvRea
      * @param quoteMode defines the quoting behavior
      * @return Returns a CsvReaderBuilder object, enabling method chaining
      */
-    public CsvReaderBuilder quote(Character quote, QuoteMode quoteMode) {
+    public CsvReaderBuilder quote(Character quote, CsvQuoteMode quoteMode) {
         if (quote != null) {
-            this.csvFormatBuilder.setQuote(quote);
+            this.configBuilder.quoteCharacter(quote);
         }
         if (quoteMode != null) {
-            this.csvFormatBuilder.setQuoteMode(quoteMode);
+            this.configBuilder.quoteMode(quoteMode);
         }
         return this;
     }
@@ -99,7 +99,7 @@ public class CsvReaderBuilder extends AbstractExcelReaderParameterBuilder<CsvRea
      */
     public CsvReaderBuilder recordSeparator(String recordSeparator) {
         if (recordSeparator != null) {
-            this.csvFormatBuilder.setRecordSeparator(recordSeparator);
+            this.configBuilder.recordSeparator(recordSeparator);
         }
         return this;
     }
@@ -112,7 +112,7 @@ public class CsvReaderBuilder extends AbstractExcelReaderParameterBuilder<CsvRea
      */
     public CsvReaderBuilder nullString(String nullString) {
         if (nullString != null) {
-            this.csvFormatBuilder.setNullString(nullString);
+            this.configBuilder.nullString(nullString);
         }
         return this;
     }
@@ -125,19 +125,21 @@ public class CsvReaderBuilder extends AbstractExcelReaderParameterBuilder<CsvRea
      */
     public CsvReaderBuilder escape(Character escape) {
         if (escape != null) {
-            this.csvFormatBuilder.setEscape(escape);
+            this.configBuilder.escapeCharacter(escape);
         }
         return this;
     }
 
     private ExcelReader buildExcelReader() {
-        this.csvFormatBuilder.setTrim(this.readWorkbook.getAutoTrim() == null
-                || this.readWorkbook.getAutoTrim()
-                || Boolean.TRUE.equals(this.readWorkbook.getAutoStrip()));
+        // Never delegate trimming to the uniVocity parser.  Trimming/stripping is
+        // handled by CsvExcelReadExecutor.dealRecord() which respects autoTrim and
+        // autoStrip independently.  Parser-level trimming interferes with nullString
+        // round-tripping (e.g. \u0000 is trimmed away before the nullValue check).
+        this.configBuilder.trim(false);
         if (this.readWorkbook.getIgnoreEmptyRow() != null) {
-            this.csvFormatBuilder.setIgnoreEmptyLines(this.readWorkbook.getIgnoreEmptyRow());
+            this.configBuilder.ignoreEmptyLines(this.readWorkbook.getIgnoreEmptyRow());
         }
-        this.readWorkbook.setCsvFormat(this.csvFormatBuilder.build());
+        this.readWorkbook.setCsvFormatConfiguration(this.configBuilder.build());
         return new ExcelReader(this.readWorkbook);
     }
 

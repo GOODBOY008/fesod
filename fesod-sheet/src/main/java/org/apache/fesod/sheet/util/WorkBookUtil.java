@@ -106,9 +106,9 @@ public class WorkBookUtil {
                         writeWorkbookHolder.getGlobalConfiguration().getUseScientificFormat(),
                         writeWorkbookHolder.getCharset(),
                         writeWorkbookHolder.getWithBom());
-                if (writeWorkbookHolder.getWriteWorkbook().getCsvFormat() != null) {
-                    csvWorkbook.setCsvFormat(
-                            writeWorkbookHolder.getWriteWorkbook().getCsvFormat());
+                if (writeWorkbookHolder.getWriteWorkbook().getCsvFormatConfiguration() != null) {
+                    csvWorkbook.setCsvFormatConfiguration(
+                            writeWorkbookHolder.getWriteWorkbook().getCsvFormatConfiguration());
                 }
                 writeWorkbookHolder.setCachedWorkbook(csvWorkbook);
                 writeWorkbookHolder.setWorkbook(csvWorkbook);

@@ -1,0 +1,225 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+name: CSV Benchmark - Comprehensive
+
+on:
+  workflow_dispatch:
+    inputs:
+      dataset_sizes:
+        description: 'Dataset sizes to test (comma-separated)'
+        required: true
+        default: '10000,50000,100000,500000'
+        type: string
+      warmup_iterations:
+        description: 'Warmup iterations'
+        required: false
+        default: '3'
+        type: string
+      measurement_iterations:
+        description: 'Measurement iterations'
+        required: false
+        default: '5'
+        type: string
+      run_time:
+        description: 'Run time per iteration (seconds)'
+        required: false
+        default: '5'
+        type: string
+      heap_size:
+        description: 'JVM heap size (e.g., 4g)'
+        required: false
+        default: '4g'
+        type: string
+      include_gc_logging:
+        description: 'Include GC logging'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  benchmark:
+    name: Benchmark (Commons CSV + uniVocity)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Display runner info
+        run: |
+          echo "=== Runner Information ==="
+          echo "Hostname: $(hostname)"
+          echo "CPU: $(nproc) cores"
+          echo "Memory: $(free -h | grep Mem | awk '{print $2}')"
+          echo "Disk: $(df -h / | tail -1 | awk '{print $4}') available"
+          echo "Kernel: $(uname -r)"
+          echo "=========================="
+
+      - name: Build both benchmark modules
+        run: |
+          echo "Building Commons CSV benchmark..."
+          ./mvnw clean package -DskipTests \
+            -pl fesod-benchmark-commons \
+            -am \
+            -q
+          
+          echo "Building uniVocity benchmark..."
+          ./mvnw clean package -DskipTests \
+            -pl fesod-benchmark-univocity \
+            -am \
+            -q
+
+      - name: Create results directory
+        run: |
+          mkdir -p fesod-benchmark-commons/target/benchmark-results
+          mkdir -p fesod-benchmark-univocity/target/benchmark-results
+
+      - name: Run Commons CSV Benchmark
+        env:
+          WARMUP_ITER: ${{ inputs.warmup_iterations || '3' }}
+          MEASURE_ITER: ${{ inputs.measurement_iterations || '5' }}
+          RUN_TIME: ${{ inputs.run_time || '5' }}
+          HEAP_SIZE: ${{ inputs.heap_size || '4g' }}
+          GC_LOGGING: ${{ inputs.include_gc_logging || 'true' }}
+        run: |
+          echo "=== Running Commons CSV Benchmark ==="
+          echo "Started at: $(date -u)"
+          
+          GC_OPTS=""
+          if [ "$GC_LOGGING" = "true" ]; then
+            GC_OPTS="-Xlog:gc*:file=fesod-benchmark-commons/target/benchmark-results/gc-commons.log:time,uptime"
+          fi
+          
+          java $GC_OPTS -Xmx$HEAP_SIZE \
+            -jar fesod-benchmark-commons/target/benchmark-commons.jar \
+            -wi $WARMUP_ITER \
+            -i $MEASURE_ITER \
+            -f 1 \
+            -r ${RUN_TIME}s \
+            -rf json \
+            -rff fesod-benchmark-commons/target/benchmark-results/commons-results.json \
+            2>&1 | tee fesod-benchmark-commons/target/benchmark-results/commons-output.txt
+          
+          echo "Completed at: $(date -u)"
+
+      - name: Cool down between benchmarks
+        run: |
+          echo "Cooling down for 10 seconds..."
+          sleep 10
+          echo "Ready for next benchmark."
+
+      - name: Run uniVocity Benchmark
+        env:
+          WARMUP_ITER: ${{ inputs.warmup_iterations || '3' }}
+          MEASURE_ITER: ${{ inputs.measurement_iterations || '5' }}
+          RUN_TIME: ${{ inputs.run_time || '5' }}
+          HEAP_SIZE: ${{ inputs.heap_size || '4g' }}
+          GC_LOGGING: ${{ inputs.include_gc_logging || 'true' }}
+        run: |
+          echo "=== Running uniVocity Benchmark ==="
+          echo "Started at: $(date -u)"
+          
+          GC_OPTS=""
+          if [ "$GC_LOGGING" = "true" ]; then
+            GC_OPTS="-Xlog:gc*:file=fesod-benchmark-univocity/target/benchmark-results/gc-univocity.log:time,uptime"
+          fi
+          
+          java $GC_OPTS -Xmx$HEAP_SIZE \
+            -jar fesod-benchmark-univocity/target/benchmark-univocity.jar \
+            -wi $WARMUP_ITER \
+            -i $MEASURE_ITER \
+            -f 1 \
+            -r ${RUN_TIME}s \
+            -rf json \
+            -rff fesod-benchmark-univocity/target/benchmark-results/univocity-results.json \
+            2>&1 | tee fesod-benchmark-univocity/target/benchmark-results/univocity-output.txt
+          
+          echo "Completed at: $(date -u)"
+
+      - name: Generate comparison summary
+        run: |
+          echo "=== Benchmark Comparison Summary ===" > benchmark-summary.txt
+          echo "Runner: $(hostname)" >> benchmark-summary.txt
+          echo "Date: $(date -u)" >> benchmark-summary.txt
+          echo "Heap: ${{ inputs.heap_size || '4g' }}" >> benchmark-summary.txt
+          echo "" >> benchmark-summary.txt
+          
+          echo "=== Commons CSV Results ===" >> benchmark-summary.txt
+          if [ -f fesod-benchmark-commons/target/benchmark-results/commons-output.txt ]; then
+            grep -E "^[A-Z].*Benchmark.*thrpt" fesod-benchmark-commons/target/benchmark-results/commons-output.txt >> benchmark-summary.txt || true
+          fi
+          echo "" >> benchmark-summary.txt
+          
+          echo "=== uniVocity Results ===" >> benchmark-summary.txt
+          if [ -f fesod-benchmark-univocity/target/benchmark-results/univocity-output.txt ]; then
+            grep -E "^[A-Z].*Benchmark.*thrpt" fesod-benchmark-univocity/target/benchmark-results/univocity-output.txt >> benchmark-summary.txt || true
+          fi
+          echo "" >> benchmark-summary.txt
+          
+          echo "=== GC Statistics ===" >> benchmark-summary.txt
+          if [ -f fesod-benchmark-commons/target/benchmark-results/gc-commons.log ]; then
+            echo "Commons CSV GC events: $(grep -c 'GC\|Pause' fesod-benchmark-commons/target/benchmark-results/gc-commons.log || echo 'N/A')" >> benchmark-summary.txt
+          fi
+          if [ -f fesod-benchmark-univocity/target/benchmark-results/gc-univocity.log ]; then
+            echo "uniVocity GC events: $(grep -c 'GC\|Pause' fesod-benchmark-univocity/target/benchmark-results/gc-univocity.log || echo 'N/A')" >> benchmark-summary.txt
+          fi
+          
+          cat benchmark-summary.txt
+
+      - name: Upload All Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-all
+          path: |
+            fesod-benchmark-commons/target/benchmark-results/*
+            fesod-benchmark-univocity/target/benchmark-results/*
+            benchmark-summary.txt
+          retention-days: 30
+          if-no-files-found: warn
+
+  notify:
+    name: Notify Results
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [benchmark]
+    if: always()
+
+    steps:
+      - name: Check benchmark status
+        run: |
+          if [ "${{ needs.benchmark.result }}" = "success" ]; then
+            echo "✅ Benchmarks completed successfully!"
+            echo ""
+            echo "📊 Results available as artifact: benchmark-results-all"
+            echo ""
+            echo "Both benchmarks ran on the same runner for reliable comparison."
+          else
+            echo "❌ Benchmark failed"
+            echo "Check the workflow logs for details"
+            exit 1
+          fi

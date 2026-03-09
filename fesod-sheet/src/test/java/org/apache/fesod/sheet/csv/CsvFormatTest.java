@@ -19,8 +19,9 @@
 
 package org.apache.fesod.sheet.csv;
 
+import com.univocity.parsers.csv.CsvWriter;
+import com.univocity.parsers.csv.CsvWriterSettings;
 import java.io.File;
-import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.file.Files;
@@ -28,14 +29,14 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVPrinter;
-import org.apache.commons.csv.QuoteMode;
 import org.apache.fesod.common.util.StringUtils;
 import org.apache.fesod.sheet.ExcelReader;
 import org.apache.fesod.sheet.ExcelWriter;
 import org.apache.fesod.sheet.FesodSheet;
+import org.apache.fesod.sheet.metadata.csv.AppendableWriter;
 import org.apache.fesod.sheet.metadata.csv.CsvConstant;
+import org.apache.fesod.sheet.metadata.csv.CsvFormatConfiguration;
+import org.apache.fesod.sheet.metadata.csv.CsvQuoteMode;
 import org.apache.fesod.sheet.metadata.csv.CsvWorkbook;
 import org.apache.fesod.sheet.read.metadata.ReadSheet;
 import org.apache.fesod.sheet.read.metadata.holder.ReadWorkbookHolder;
@@ -152,8 +153,8 @@ public class CsvFormatTest {
 
     @Test
     public void testHolder() {
-        CSVFormat csvFormat =
-                CSVFormat.DEFAULT.builder().setDelimiter(CsvConstant.AT).build();
+        CsvFormatConfiguration csvFormatConfiguration =
+                CsvFormatConfiguration.builder().delimiter(CsvConstant.AT).build();
 
         csvFile = TestFileUtil.createNewFile(CSV_BASE + "csv-delimiter.csv");
         try (ExcelWriter excelWriter = FesodSheet.write(csvFile, CsvData.class)
@@ -163,7 +164,7 @@ public class CsvFormatTest {
             Workbook workbook = writeWorkbookHolder.getWorkbook();
             if (workbook instanceof CsvWorkbook) {
                 CsvWorkbook csvWorkbook = (CsvWorkbook) workbook;
-                csvWorkbook.setCsvFormat(csvFormat);
+                csvWorkbook.setCsvFormatConfiguration(csvFormatConfiguration);
                 writeWorkbookHolder.setWorkbook(csvWorkbook);
             }
             WriteSheet writeSheet = FesodSheet.writerSheet(0).build();
@@ -177,7 +178,7 @@ public class CsvFormatTest {
                     excelReader.analysisContext().readWorkbookHolder();
             if (readWorkbookHolder instanceof CsvReadWorkbookHolder) {
                 CsvReadWorkbookHolder csvReadWorkbookHolder = (CsvReadWorkbookHolder) readWorkbookHolder;
-                csvReadWorkbookHolder.setCsvFormat(csvFormat);
+                csvReadWorkbookHolder.setCsvFormatConfiguration(csvFormatConfiguration);
             }
             ReadSheet readSheet = FesodSheet.readSheet(0).build();
             excelReader.read(readSheet);
@@ -187,12 +188,11 @@ public class CsvFormatTest {
     @Test
     public void writeWithCommonCsv() {
         csvFile = TestFileUtil.readFile(CSV_BASE + "write-common-csv.csv");
-        CSVFormat csvFormat = CSVFormat.DEFAULT
-                .builder()
-                .setQuote(CsvConstant.DOUBLE_QUOTE)
-                .setQuoteMode(QuoteMode.ALL)
+        CsvFormatConfiguration csvFormatConfiguration = CsvFormatConfiguration.builder()
+                .quoteCharacter(CsvConstant.DOUBLE_QUOTE)
+                .quoteMode(CsvQuoteMode.ALL)
                 .build();
-        writeWithCommonCsv(csvFile, csvFormat, dataList(10, STRING_PREFIX));
+        writeWithCsvWriter(csvFile, csvFormatConfiguration, dataList(10, STRING_PREFIX));
     }
 
     private void doTest(
@@ -217,7 +217,7 @@ public class CsvFormatTest {
             FesodSheet.write(csvFile, CsvData.class)
                     .csv()
                     .delimiter(delimiter)
-                    .quote(quote, QuoteMode.MINIMAL)
+                    .quote(quote, CsvQuoteMode.MINIMAL)
                     .nullString(nullString)
                     .recordSeparator(recordSeparator)
                     .escape(escapse)
@@ -227,7 +227,7 @@ public class CsvFormatTest {
         List<CsvData> dataList = FesodSheet.read(csvFile, CsvData.class, new CsvDataListener())
                 .csv()
                 .delimiter(delimiter)
-                .quote(quote, QuoteMode.MINIMAL)
+                .quote(quote, CsvQuoteMode.MINIMAL)
                 .nullString(nullString)
                 .recordSeparator(recordSeparator)
                 .escape(escapse)
@@ -248,20 +248,23 @@ public class CsvFormatTest {
         return dataList;
     }
 
-    private void writeWithCommonCsv(File csvFile, CSVFormat csvFormat, List<CsvData> dataList) {
+    private void writeWithCsvWriter(
+            File csvFile, CsvFormatConfiguration csvFormatConfiguration, List<CsvData> dataList) {
         try {
             Appendable out = new PrintWriter(new OutputStreamWriter(Files.newOutputStream(csvFile.toPath())));
-            CSVPrinter printer = csvFormat.print(out);
+            CsvWriterSettings settings = csvFormatConfiguration.toWriterSettings();
+            CsvWriter writer = new CsvWriter(new AppendableWriter(out), settings);
             for (CsvData data : dataList) {
                 // format date
-                printer.printRecord(
-                        data.getString(),
-                        DateUtils.format(data.getDate(), DateUtils.DATE_FORMAT_19),
-                        data.getDoubleData());
+                writer.writeRow(new String[] {
+                    data.getString(),
+                    DateUtils.format(data.getDate(), DateUtils.DATE_FORMAT_19),
+                    String.valueOf(data.getDoubleData())
+                });
             }
-            printer.flush();
-            printer.close();
-        } catch (IOException e) {
+            writer.flush();
+            writer.close();
+        } catch (Exception e) {
             log.error(e.getMessage(), e);
         }
     }

@@ -25,11 +25,11 @@
 
 package org.apache.fesod.sheet.read.metadata.holder.csv;
 
+import com.univocity.parsers.csv.CsvParser;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
+import org.apache.fesod.sheet.metadata.csv.CsvFormatConfiguration;
 import org.apache.fesod.sheet.read.metadata.ReadWorkbook;
 import org.apache.fesod.sheet.read.metadata.holder.ReadWorkbookHolder;
 import org.apache.fesod.sheet.support.ExcelTypeEnum;
@@ -44,12 +44,15 @@ import org.apache.fesod.sheet.support.ExcelTypeEnum;
 @EqualsAndHashCode
 public class CsvReadWorkbookHolder extends ReadWorkbookHolder {
 
-    private CSVFormat csvFormat;
-    private CSVParser csvParser;
+    private CsvFormatConfiguration csvFormatConfiguration;
+    private CsvParser csvParser;
 
     public CsvReadWorkbookHolder(ReadWorkbook readWorkbook) {
         super(readWorkbook);
         setExcelType(ExcelTypeEnum.CSV);
-        this.csvFormat = readWorkbook.getCsvFormat() == null ? CSVFormat.DEFAULT : readWorkbook.getCsvFormat();
+        // Read configuration from ReadWorkbook, falling back to defaults if not set
+        CsvFormatConfiguration config = readWorkbook.getCsvFormatConfiguration();
+        this.csvFormatConfiguration =
+                config != null ? config : CsvFormatConfiguration.builder().build();
     }
 }

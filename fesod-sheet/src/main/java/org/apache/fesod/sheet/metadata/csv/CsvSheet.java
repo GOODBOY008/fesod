@@ -25,9 +25,13 @@
 
 package org.apache.fesod.sheet.metadata.csv;
 
+import com.univocity.parsers.csv.CsvWriter;
+import com.univocity.parsers.csv.CsvWriterSettings;
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.Writer;
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -35,8 +39,6 @@ import java.util.Map;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVPrinter;
 import org.apache.fesod.common.util.ListUtils;
 import org.apache.fesod.common.util.StringUtils;
 import org.apache.fesod.sheet.constant.BuiltinFormats;
@@ -91,9 +93,9 @@ public class CsvSheet implements Sheet, Closeable {
      */
     private Integer rowCacheCount;
     /**
-     * format
+     * format configuration
      */
-    public CSVFormat csvFormat;
+    public CsvFormatConfiguration csvFormatConfiguration;
 
     /**
      * last row index
@@ -105,15 +107,23 @@ public class CsvSheet implements Sheet, Closeable {
      */
     private List<CsvRow> rowCache;
     /**
-     * csv printer
+     * csv writer
      */
-    private CSVPrinter csvPrinter;
+    private CsvWriter csvWriter;
+
+    /**
+     * Reusable write buffer — avoids allocating a new String[] per row.
+     * Grown as needed via {@link #ensureWriteBuffer(int)}.
+     */
+    private String[] writeBuffer;
 
     public CsvSheet(CsvWorkbook csvWorkbook, Appendable out) {
         this.csvWorkbook = csvWorkbook;
         this.out = out;
         this.rowCacheCount = 100;
-        this.csvFormat = csvWorkbook.getCsvFormat() == null ? CSVFormat.DEFAULT : csvWorkbook.getCsvFormat();
+        this.csvFormatConfiguration = csvWorkbook.getCsvFormatConfiguration() == null
+                ? CsvFormatConfiguration.builder().build()
+                : csvWorkbook.getCsvFormatConfiguration();
         this.lastRowIndex = -1;
     }
 
@@ -131,7 +141,7 @@ public class CsvSheet implements Sheet, Closeable {
     }
 
     private void initSheet() {
-        if (csvPrinter != null) {
+        if (csvWriter != null) {
             return;
         }
         rowCache = ListUtils.newArrayListWithExpectedSize(rowCacheCount);
@@ -143,7 +153,9 @@ public class CsvSheet implements Sheet, Closeable {
                     out.append(byteOrderMark.getStringPrefix());
                 }
             }
-            csvPrinter = csvFormat.print(out);
+            Writer writer = (out instanceof Writer) ? (Writer) out : new AppendableWriter(out);
+            CsvWriterSettings settings = csvFormatConfiguration.toWriterSettings();
+            csvWriter = new CsvWriter(writer, settings);
         } catch (IOException e) {
             throw new ExcelGenerateException(e);
         }
@@ -661,8 +673,7 @@ public class CsvSheet implements Sheet, Closeable {
         initSheet();
 
         flushData();
-        csvPrinter.flush();
-        csvPrinter.close();
+        csvWriter.close();
     }
 
     public void printData() {
@@ -672,22 +683,37 @@ public class CsvSheet implements Sheet, Closeable {
     }
 
     public void flushData() {
-        try {
-            for (CsvRow row : rowCache) {
-                Iterator<Cell> cellIterator = row.cellIterator();
-                int columnIndex = 0;
-                while (cellIterator.hasNext()) {
-                    CsvCell csvCell = (CsvCell) cellIterator.next();
-                    while (csvCell.getColumnIndex() > columnIndex++) {
-                        csvPrinter.print(null);
-                    }
-                    csvPrinter.print(buildCellValue(csvCell));
+        for (CsvRow row : rowCache) {
+            int maxColumnIndex = -1;
+            Iterator<Cell> cellIterator = row.cellIterator();
+
+            // Single-pass: find max column index and build values simultaneously
+            while (cellIterator.hasNext()) {
+                CsvCell csvCell = (CsvCell) cellIterator.next();
+                int colIdx = csvCell.getColumnIndex();
+                if (colIdx > maxColumnIndex) {
+                    maxColumnIndex = colIdx;
                 }
-                csvPrinter.println();
             }
-            rowCache.clear();
-        } catch (IOException e) {
-            throw new ExcelGenerateException(e);
+
+            int length = maxColumnIndex + 1;
+            ensureWriteBuffer(length);
+
+            cellIterator = row.cellIterator();
+            while (cellIterator.hasNext()) {
+                CsvCell csvCell = (CsvCell) cellIterator.next();
+                writeBuffer[csvCell.getColumnIndex()] = buildCellValue(csvCell);
+            }
+
+            csvWriter.writeRow(writeBuffer);
+            Arrays.fill(writeBuffer, 0, length, null);
+        }
+        rowCache.clear();
+    }
+
+    private void ensureWriteBuffer(int minLength) {
+        if (writeBuffer == null || writeBuffer.length < minLength) {
+            writeBuffer = new String[minLength];
         }
     }
 

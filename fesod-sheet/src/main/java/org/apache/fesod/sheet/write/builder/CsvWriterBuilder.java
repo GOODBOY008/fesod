@@ -21,10 +21,10 @@ package org.apache.fesod.sheet.write.builder;
 
 import java.util.Collection;
 import java.util.function.Supplier;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.QuoteMode;
 import org.apache.fesod.sheet.ExcelWriter;
 import org.apache.fesod.sheet.exception.ExcelGenerateException;
+import org.apache.fesod.sheet.metadata.csv.CsvFormatConfiguration;
+import org.apache.fesod.sheet.metadata.csv.CsvQuoteMode;
 import org.apache.fesod.sheet.support.ExcelTypeEnum;
 import org.apache.fesod.sheet.write.metadata.WriteSheet;
 import org.apache.fesod.sheet.write.metadata.WriteWorkbook;
@@ -34,7 +34,7 @@ import org.apache.fesod.sheet.write.metadata.WriteWorkbook;
  */
 public class CsvWriterBuilder extends AbstractExcelWriterParameterBuilder<CsvWriterBuilder, WriteSheet> {
     private WriteWorkbook writeWorkbook;
-    private CSVFormat.Builder csvFormatBuilder;
+    private CsvFormatConfiguration.Builder configBuilder;
     private WriteSheet writeSheet;
 
     private CsvWriterBuilder() {}
@@ -43,7 +43,7 @@ public class CsvWriterBuilder extends AbstractExcelWriterParameterBuilder<CsvWri
         writeWorkbook.setExcelType(ExcelTypeEnum.CSV);
         this.writeWorkbook = writeWorkbook;
         this.writeSheet = new WriteSheet();
-        this.csvFormatBuilder = CSVFormat.DEFAULT.builder();
+        this.configBuilder = CsvFormatConfiguration.builder();
     }
 
     /**
@@ -54,7 +54,7 @@ public class CsvWriterBuilder extends AbstractExcelWriterParameterBuilder<CsvWri
      */
     public CsvWriterBuilder delimiter(String delimiter) {
         if (delimiter != null) {
-            this.csvFormatBuilder.setDelimiter(delimiter);
+            this.configBuilder.delimiter(delimiter);
         }
         return this;
     }
@@ -66,7 +66,7 @@ public class CsvWriterBuilder extends AbstractExcelWriterParameterBuilder<CsvWri
      * @return Returns a CsvWriterBuilder object, enabling method chaining
      */
     public CsvWriterBuilder quote(Character quote) {
-        return quote(quote, QuoteMode.MINIMAL);
+        return quote(quote, CsvQuoteMode.MINIMAL);
     }
 
     /**
@@ -76,12 +76,12 @@ public class CsvWriterBuilder extends AbstractExcelWriterParameterBuilder<CsvWri
      * @param quoteMode defines the quoting behavior
      * @return Returns a CsvWriterBuilder object, enabling method chaining
      */
-    public CsvWriterBuilder quote(Character quote, QuoteMode quoteMode) {
+    public CsvWriterBuilder quote(Character quote, CsvQuoteMode quoteMode) {
         if (quote != null) {
-            this.csvFormatBuilder.setQuote(quote);
+            this.configBuilder.quoteCharacter(quote);
         }
         if (quoteMode != null) {
-            this.csvFormatBuilder.setQuoteMode(quoteMode);
+            this.configBuilder.quoteMode(quoteMode);
         }
         return this;
     }
@@ -94,7 +94,7 @@ public class CsvWriterBuilder extends AbstractExcelWriterParameterBuilder<CsvWri
      */
     public CsvWriterBuilder recordSeparator(String recordSeparator) {
         if (recordSeparator != null) {
-            this.csvFormatBuilder.setRecordSeparator(recordSeparator);
+            this.configBuilder.recordSeparator(recordSeparator);
         }
         return this;
     }
@@ -107,7 +107,7 @@ public class CsvWriterBuilder extends AbstractExcelWriterParameterBuilder<CsvWri
      */
     public CsvWriterBuilder nullString(String nullString) {
         if (nullString != null) {
-            this.csvFormatBuilder.setNullString(nullString);
+            this.configBuilder.nullString(nullString);
         }
         return this;
     }
@@ -120,19 +120,19 @@ public class CsvWriterBuilder extends AbstractExcelWriterParameterBuilder<CsvWri
      */
     public CsvWriterBuilder escape(Character escape) {
         if (escape != null) {
-            this.csvFormatBuilder.setEscape(escape);
+            this.configBuilder.escapeCharacter(escape);
         }
         return this;
     }
 
     private ExcelWriter buildExcelWriter() {
-        this.csvFormatBuilder.setTrim(this.writeWorkbook.getAutoTrim() == null
+        this.configBuilder.trim(this.writeWorkbook.getAutoTrim() == null
                 || this.writeWorkbook.getAutoTrim()
                 || Boolean.TRUE.equals(this.writeWorkbook.getAutoStrip()));
         if (this.writeWorkbook.getNeedHead() != null) {
-            this.csvFormatBuilder.setSkipHeaderRecord(!this.writeWorkbook.getNeedHead());
+            this.configBuilder.skipHeaderRecord(!this.writeWorkbook.getNeedHead());
         }
-        this.writeWorkbook.setCsvFormat(this.csvFormatBuilder.build());
+        this.writeWorkbook.setCsvFormatConfiguration(this.configBuilder.build());
         return new ExcelWriter(this.writeWorkbook);
     }
 

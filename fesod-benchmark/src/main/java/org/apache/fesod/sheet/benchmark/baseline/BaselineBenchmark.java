@@ -122,6 +122,7 @@ public class BaselineBenchmark {
      */
     @Benchmark
     public long write(Blackhole blackhole) {
+        spin(150); // artificial regression for CI gate validation (temporary branch)
         File outputFile = BenchmarkFileUtil.createTestFile(String.format(
                 "baseline_write_%s_%s_%s.%s",
                 datasetSize.toLowerCase(),
@@ -138,6 +139,13 @@ public class BaselineBenchmark {
             }
         }
         return data.size();
+    }
+
+    private static void spin(long millis) {
+        long end = System.nanoTime() + millis * 1_000_000L;
+        while (System.nanoTime() < end) {
+            // busy wait
+        }
     }
 
     /**
